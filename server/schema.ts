@@ -32,6 +32,11 @@ export const typeDefs = parse(`
     finalized
   }
 
+  enum FinalizeAttemptStatus {
+    finalized
+    conflicted
+  }
+
   type Clause {
     id: ID!
     code: String!
@@ -87,17 +92,25 @@ export const typeDefs = parse(`
     clarifications: [Clarification!]!
   }
 
+  type VersionSnapshot {
+    revision: Int!
+    takenAt: String!
+    responses: [SupplierResponse!]!
+  }
+
   type ReviewVersion {
     id: ID!
     version: String!
     label: String!
     status: VersionStatus!
+    revision: Int!
     createdAt: String!
     createdBy: String!
     signedBy: [String!]!
     clauseCount: Int!
     responseCount: Int!
     contentHash: String!
+    snapshot: VersionSnapshot
   }
 
   type AuditLog {
@@ -107,6 +120,36 @@ export const typeDefs = parse(`
     action: String!
     entity: String!
     detail: String!
+    revision: Int!
+  }
+
+  type ConflictEntry {
+    revision: Int!
+    actor: String!
+    action: String!
+    entity: String!
+    detail: String!
+  }
+
+  type FinalizeAttempt {
+    id: ID!
+    at: String!
+    actor: String!
+    label: String!
+    baseRevision: Int!
+    currentRevision: Int!
+    status: FinalizeAttemptStatus!
+    versionId: String
+    conflicts: [ConflictEntry!]!
+  }
+
+  type HashVerification {
+    versionId: ID!
+    storedHash: String!
+    recomputedHash: String!
+    matches: Boolean!
+    snapshotRevision: Int!
+    snapshotTakenAt: String!
   }
 
   type DashboardStats {
@@ -128,8 +171,10 @@ export const typeDefs = parse(`
     clauses: [Clause!]!
     versions: [ReviewVersion!]!
     auditLogs: [AuditLog!]!
+    finalizeAttempts: [FinalizeAttempt!]!
     dashboard: DashboardStats!
     suppliers: [Supplier!]!
+    revision: Int!
   }
 
   input AssessmentInput {
@@ -158,11 +203,13 @@ export const typeDefs = parse(`
     label: String!
     actor: String!
     role: ReviewRole!
+    baseRevision: Int!
   }
 
   type Query {
     workspace: WorkspaceData!
     dashboard: DashboardStats!
+    verifyVersionHash(versionId: ID!): HashVerification!
   }
 
   type Mutation {

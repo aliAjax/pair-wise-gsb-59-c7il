@@ -1,7 +1,10 @@
 import { Injectable, inject } from "@angular/core";
 import { Actions, createEffect, ofType } from "@ngrx/effects";
 import { catchError, map, of, switchMap } from "rxjs";
-import { ReviewGraphqlService } from "../services/graphql.service";
+import {
+  ReviewGraphqlService,
+  VersionConflictError,
+} from "../services/graphql.service";
 import { ReviewActions } from "./review.actions";
 
 const errorMessage = (error: unknown): string => {
@@ -117,16 +120,35 @@ export class ReviewEffects {
           map(({ workspace }) =>
             ReviewActions.loadReviewDataSuccess({
               workspace,
-              toast: "评审版本已汇总签字并锁定。",
+              toast:
+                "评审版本已按当前修订号定稿锁定，后续提交自动进入下一工作版。",
             }),
           ),
-          catchError((error: unknown) =>
-            of(
+          catchError((error: unknown) => {
+            if (error instanceof VersionConflictError) {
+              return this.graphql.loadWorkspace().pipe(
+                map(({ workspace }) =>
+                  ReviewActions.finalizeVersionConflict({
+                    workspace,
+                    attemptId: error.attemptId,
+                    message: error.message,
+                  }),
+                ),
+                catchError(() =>
+                  of(
+                    ReviewActions.loadReviewDataFailure({
+                      error: errorMessage(error),
+                    }),
+                  ),
+                ),
+              );
+            }
+            return of(
               ReviewActions.loadReviewDataFailure({
                 error: errorMessage(error),
               }),
-            ),
-          ),
+            );
+          }),
         ),
       ),
     ),

@@ -16,8 +16,12 @@
 
   <div class="version-summary">
     <article>
-      <span>版本总数</span>
-      <strong>{{ versions().length }}</strong>
+      <span>当前工作版</span>
+      <strong>{{ workingVersion()?.version ?? "无" }}</strong>
+    </article>
+    <article>
+      <span>当前修订号</span>
+      <strong>r{{ revision() }}</strong>
     </article>
     <article>
       <span>已定稿版本</span>
@@ -38,7 +42,7 @@
       <div class="data-panel-header">
         <div>
           <h3>版本历史</h3>
-          <p>定稿版本保存内容哈希和签署人</p>
+          <p>定稿版本按修订号锁定，保存快照和可复算哈希</p>
         </div>
       </div>
       <p-table [value]="versions()" responsiveLayout="scroll">
@@ -47,9 +51,11 @@
             <th>版本</th>
             <th>名称</th>
             <th>状态</th>
+            <th>修订号</th>
             <th>响应项</th>
             <th>内容哈希</th>
             <th>创建信息</th>
+            <th>校验</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-version>
@@ -63,18 +69,34 @@
               </div>
             </td>
             <td><app-version-tag [status]="version.status" /></td>
+            <td class="mono">r{{ version.revision }}</td>
             <td>
               {{ version.responseCount }} 项
               <div class="table-secondary">
                 {{ version.clauseCount }} 条条款
               </div>
             </td>
-            <td class="mono">{{ version.contentHash }}</td>
+            <td class="mono hash-cell" [title]="version.contentHash || '工作版待定稿生成哈希'">
+              {{ shortHash(version) }}
+            </td>
             <td>
               {{ version.createdBy }}
               <div class="table-secondary">
                 {{ version.createdAt | date: "yyyy-MM-dd HH:mm" }}
               </div>
+            </td>
+            <td>
+              @if (version.status === "finalized") {
+                <p-button
+                  label="复算"
+                  icon="pi pi-shield"
+                  size="small"
+                  [outlined]="true"
+                  (onClick)="verifyVersion(version)"
+                />
+              } @else {
+                <span class="muted">工作版</span>
+              }
             </td>
           </tr>
         </ng-template>
@@ -121,6 +143,73 @@
       }
     </aside>
   </div>
+
+  <section class="data-panel attempts-panel">
+    <div class="data-panel-header">
+      <div>
+        <h3>定稿尝试记录</h3>
+        <p>每次定稿尝试都会留痕；修订号冲突的尝试保留冲突清单，可基于最新修订号重发。</p>
+      </div>
+    </div>
+    <p-table [value]="finalizeAttempts()" responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>时间</th>
+          <th>操作人</th>
+          <th>版本名称</th>
+          <th>基于修订号</th>
+          <th>结果</th>
+          <th>冲突项</th>
+          <th>操作</th>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="body" let-attempt>
+        <tr>
+          <td class="mono">{{ attempt.at | date: "yyyy-MM-dd HH:mm:ss" }}</td>
+          <td>{{ attempt.actor }}</td>
+          <td>
+            <span class="table-primary">{{ attempt.label }}</span>
+            @if (attempt.versionId) {
+              <div class="table-secondary">{{ attempt.versionId }}</div>
+            }
+          </td>
+          <td class="mono">r{{ attempt.baseRevision }} → r{{ attempt.currentRevision }}</td>
+          <td>
+            <p-tag
+              [value]="attempt.status === 'finalized' ? '定稿成功' : '修订号冲突'"
+              [severity]="attempt.status === 'finalized' ? 'success' : 'danger'"
+            />
+          </td>
+          <td>
+            @if (attempt.conflicts.length) {
+              <span class="danger-text">{{ attempt.conflicts.length }} 项先到变更</span>
+            } @else {
+              <span class="muted">无</span>
+            }
+          </td>
+          <td>
+            @if (attempt.status === "conflicted") {
+              <p-button
+                label="查看冲突"
+                icon="pi pi-exclamation-triangle"
+                size="small"
+                severity="danger"
+                [outlined]="true"
+                (onClick)="openAttempt(attempt)"
+              />
+            } @else {
+              <span class="muted">—</span>
+            }
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="7">还没有定稿尝试记录。</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </section>
 
   <section class="data-panel difference-panel">
     <div class="data-panel-header">
@@ -194,7 +283,9 @@
       />
     </div>
     <div class="finalize-note">
-      定稿前系统会检查未完成澄清。定稿后当前版本会生成内容哈希并锁定签署人。
+      定稿前系统会检查未完成澄清，并要求否决项具备两名评审员结论。
+      定稿将按当前修订号 r{{ revision() }} 锁定，保存供应商响应、独立评审意见和澄清记录快照，
+      生成可复算的内容哈希；此后到达的提交自动进入下一工作版，不会改写本版本。
     </div>
     <div class="inline-actions dialog-actions">
       <p-button
@@ -211,6 +302,88 @@
       />
     </div>
   </form>
+</p-dialog>
+
+<p-dialog
+  header="定稿冲突 — 可恢复重发"
+  [modal]="true"
+  [visible]="conflictVisible()"
+  (visibleChange)="$event ? conflictVisible.set(true) : closeConflict()"
+  [style]="{ width: 'min(640px, 94vw)' }"
+>
+  @if (selectedAttempt(); as attempt) {
+    <div class="conflict-summary">
+      <p>
+        「{{ attempt.label }}」基于修订号 r{{ attempt.baseRevision }} 定稿，
+        但当前修订号已为 r{{ attempt.currentRevision }}，以下
+        {{ attempt.conflicts.length }} 项变更先于本次定稿到达。
+        本次尝试已保留在定稿尝试记录中，不会改写已生成版本。
+      </p>
+    </div>
+    <ul class="conflict-list">
+      @for (conflict of attempt.conflicts; track $index) {
+        <li>
+          <header>
+            <span class="mono">r{{ conflict.revision }}</span>
+            <strong>{{ conflict.actor }} · {{ conflict.action }}</strong>
+            <span class="mono">{{ conflict.entity }}</span>
+          </header>
+          <p>{{ conflict.detail }}</p>
+        </li>
+      }
+    </ul>
+    <div class="inline-actions dialog-actions">
+      <p-button
+        label="关闭"
+        severity="secondary"
+        [outlined]="true"
+        (onClick)="closeConflict()"
+      />
+      <p-button
+        label="基于最新修订号 r{{ revision() }} 重发"
+        icon="pi pi-replay"
+        [disabled]="!canFinalize()"
+        (onClick)="retryFinalize()"
+      />
+    </div>
+  }
+</p-dialog>
+
+<p-dialog
+  header="版本哈希复算校验"
+  [modal]="true"
+  [visible]="verifyVisible()"
+  (visibleChange)="verifyVisible.set($event)"
+  [style]="{ width: 'min(640px, 94vw)' }"
+>
+  @if (verifyTarget(); as version) {
+    <div class="verify-header">
+      <strong>{{ version.version }} {{ version.label }}</strong>
+      <span class="muted">定稿快照：供应商响应、独立评审意见与澄清记录</span>
+    </div>
+  }
+  @if (verifying()) {
+    <p class="empty-copy">正在按同一算法复算快照哈希…</p>
+  } @else if (verifyFailed()) {
+    <p class="empty-copy">该版本没有可复算的快照，或校验请求失败。</p>
+  } @else if (verification(); as result) {
+    <div class="verify-grid">
+      <span>快照修订号</span>
+      <strong class="mono">r{{ result.snapshotRevision }}</strong>
+      <span>快照时间</span>
+      <strong>{{ result.snapshotTakenAt | date: "yyyy-MM-dd HH:mm:ss" }}</strong>
+      <span>存储哈希</span>
+      <code>{{ result.storedHash }}</code>
+      <span>复算哈希</span>
+      <code>{{ result.recomputedHash }}</code>
+    </div>
+    <div class="verify-result">
+      <p-tag
+        [value]="result.matches ? '哈希一致：定稿后数据未被改写' : '哈希不一致：快照与记录不符'"
+        [severity]="result.matches ? 'success' : 'danger'"
+      />
+    </div>
+  }
 </p-dialog>
 
 <p-dialog

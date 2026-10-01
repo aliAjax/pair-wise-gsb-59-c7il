@@ -1,12 +1,13 @@
 import { Injectable, inject } from "@angular/core";
 import { Apollo, gql } from "apollo-angular";
-import { Observable, map } from "rxjs";
+import { Observable, map, throwError, catchError } from "rxjs";
 import type {
   AssessmentInput,
   Clarification,
   ClarificationInput,
   ClarificationResponseInput,
   FinalizeVersionInput,
+  HashVerification,
   ReviewVersion,
   ReviewerOpinion,
   WorkspaceQueryResult,
@@ -15,6 +16,7 @@ import type {
 const WORKSPACE_QUERY = gql`
   query ProcurementReviewWorkspace {
     workspace {
+      revision
       clauses {
         id
         code
@@ -68,6 +70,7 @@ const WORKSPACE_QUERY = gql`
         version
         label
         status
+        revision
         createdAt
         createdBy
         signedBy
@@ -82,6 +85,24 @@ const WORKSPACE_QUERY = gql`
         action
         entity
         detail
+        revision
+      }
+      finalizeAttempts {
+        id
+        at
+        actor
+        label
+        baseRevision
+        currentRevision
+        status
+        versionId
+        conflicts {
+          revision
+          actor
+          action
+          entity
+          detail
+        }
       }
       dashboard {
         totalClauses
@@ -156,6 +177,7 @@ const FINALIZE_VERSION = gql`
       version
       label
       status
+      revision
       createdAt
       createdBy
       signedBy
@@ -166,11 +188,50 @@ const FINALIZE_VERSION = gql`
   }
 `;
 
+const VERIFY_VERSION_HASH = gql`
+  query VerifyVersionHash($versionId: ID!) {
+    verifyVersionHash(versionId: $versionId) {
+      versionId
+      storedHash
+      recomputedHash
+      matches
+      snapshotRevision
+      snapshotTakenAt
+    }
+  }
+`;
+
 const RESET_REVIEW_DATA = gql`
   mutation ResetReviewData {
     resetReviewData
   }
 `;
+
+/** 定稿修订号冲突：服务端已保留尝试与冲突清单，可基于最新修订号重发。 */
+export class VersionConflictError extends Error {
+  constructor(
+    message: string,
+    readonly attemptId?: string,
+    readonly currentRevision?: number,
+  ) {
+    super(message);
+    this.name = "VersionConflictError";
+  }
+}
+
+interface GraphQLErrorLike {
+  message?: string;
+  extensions?: Record<string, unknown>;
+}
+
+const firstGraphQLError = (error: unknown): GraphQLErrorLike | undefined => {
+  const carrier = error as {
+    graphQLErrors?: ReadonlyArray<GraphQLErrorLike>;
+    errors?: ReadonlyArray<GraphQLErrorLike>;
+  };
+  const list = carrier?.graphQLErrors ?? carrier?.errors;
+  return Array.isArray(list) ? list[0] : undefined;
+};
 
 @Injectable({ providedIn: "root" })
 export class ReviewGraphqlService {
@@ -258,6 +319,39 @@ export class ReviewGraphqlService {
             throw new Error("GraphQL 未返回版本信息。");
           }
           return result.data.finalizeVersion;
+        }),
+        catchError((error: unknown) => {
+          const graphQLError = firstGraphQLError(error);
+          if (graphQLError?.extensions?.["code"] === "VERSION_CONFLICT") {
+            return throwError(
+              () =>
+                new VersionConflictError(
+                  graphQLError.message ?? "定稿与最新修订号冲突。",
+                  graphQLError.extensions?.["attemptId"] as string | undefined,
+                  graphQLError.extensions?.["currentRevision"] as
+                    | number
+                    | undefined,
+                ),
+            );
+          }
+          return throwError(() => error);
+        }),
+      );
+  }
+
+  verifyVersionHash(versionId: string): Observable<HashVerification> {
+    return this.apollo
+      .query<{ verifyVersionHash: HashVerification }>({
+        query: VERIFY_VERSION_HASH,
+        variables: { versionId },
+        fetchPolicy: "network-only",
+      })
+      .pipe(
+        map((result) => {
+          if (!result.data) {
+            throw new Error("GraphQL 未返回哈希校验结果。");
+          }
+          return result.data.verifyVersionHash;
         }),
       );
   }

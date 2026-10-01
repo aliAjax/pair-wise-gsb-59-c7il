@@ -1,11 +1,13 @@
 import { ApolloServer } from "@apollo/server";
 import { startStandaloneServer } from "@apollo/server/standalone";
+import { GraphQLError } from "graphql";
 import {
   createAudit,
   createClarificationId,
   createOpinionId,
   reviewDataStore,
 } from "./data";
+import { computeSnapshotHash } from "./hash";
 import { typeDefs } from "./schema";
 import type {
   AssessmentInput,
@@ -72,6 +74,16 @@ const requireRole = (role: ReviewRole, allowed: ReviewRole[]): void => {
   }
 };
 
+/** 当前工作版标识，用于在审计中标注晚到提交的去向。 */
+const workingVersionNote = (database: ReviewDatabase): string => {
+  const draft = database.versions.find(
+    (version) => version.status === "draft",
+  );
+  return draft
+    ? `该变更记入 ${draft.version} 工作版（修订号 r${database.revision}），不回写已定稿版本。`
+    : "";
+};
+
 const resolvers = {
   Query: {
     workspace: () => {
@@ -82,6 +94,30 @@ const resolvers = {
       };
     },
     dashboard: () => getDashboard(reviewDataStore.snapshot()),
+    verifyVersionHash: (
+      _parent: unknown,
+      { versionId }: { versionId: string },
+    ) => {
+      const database = reviewDataStore.snapshot();
+      const version = database.versions.find(
+        (item) => item.id === versionId,
+      );
+      if (!version) {
+        throw new Error("评审版本不存在。");
+      }
+      if (!version.snapshot) {
+        throw new Error("该版本尚未定稿，没有可复算的快照。");
+      }
+      const recomputedHash = computeSnapshotHash(version.snapshot);
+      return {
+        versionId: version.id,
+        storedHash: version.contentHash,
+        recomputedHash,
+        matches: recomputedHash === version.contentHash,
+        snapshotRevision: version.snapshot.revision,
+        snapshotTakenAt: version.snapshot.takenAt,
+      };
+    },
   },
   Clause: {
     responses: (clause: Clause, _args: unknown, context: { database: ReviewDatabase }) =>
@@ -139,7 +175,7 @@ const resolvers = {
           opinion.reviewer,
           "提交独立意见",
           response.id,
-          `${clause.code} ${clause.title} 判定为 ${input.decision}，评分 ${input.score}。`,
+          `${clause.code} ${clause.title} 判定为 ${input.decision}，评分 ${input.score}。${workingVersionNote(database)}`,
         );
         return opinion;
       });
@@ -190,7 +226,7 @@ const resolvers = {
           input.actor,
           "发起澄清",
           clarification.id,
-          `${response.supplierName} ${response.clauseId} 第 ${round} 轮澄清已发起。`,
+          `${response.supplierName} ${response.clauseId} 第 ${round} 轮澄清已发起。${workingVersionNote(database)}`,
         );
         return clarification;
       }),
@@ -222,63 +258,37 @@ const resolvers = {
           input.actor,
           "回复澄清",
           clarification.id,
-          `第 ${clarification.round} 轮澄清已回复，等待评审员复核。`,
+          `第 ${clarification.round} 轮澄清已回复，等待评审员复核。${workingVersionNote(database)}`,
         );
         return clarification;
       }),
     finalizeVersion: (
       _parent: unknown,
       { input }: { input: FinalizeVersionInput },
-    ) =>
-      reviewDataStore.mutate((database) => {
-        requireRole(input.role, ["chair"]);
-        if (input.label.trim().length < 4) {
-          throw new Error("版本名称至少需要 4 个字符。");
-        }
-        const blockingClarifications = database.responses
-          .flatMap((response) => response.clarifications)
-          .filter(
-            (clarification) =>
-              clarification.status === "open" ||
-              clarification.status === "overdue",
-          );
-        if (blockingClarifications.length > 0) {
-          throw new Error(
-            `仍有 ${blockingClarifications.length} 项未完成澄清，不能定稿。`,
-          );
-        }
-        const maxVersion =
-          database.versions.reduce((maximum, version) => {
-            const numeric = Number(version.version.replace(/\D/g, ""));
-            return Number.isFinite(numeric)
-              ? Math.max(maximum, numeric)
-              : maximum;
-          }, 0) + 1;
-        database.versions.forEach((version) => {
-          version.status = "finalized";
-        });
-        const version = {
-          id: `VER-${Date.now()}`,
-          version: `V${maxVersion}`,
-          label: input.label.trim(),
-          status: "finalized" as const,
-          createdAt: new Date().toISOString(),
-          createdBy: input.actor,
-          signedBy: [input.actor],
-          clauseCount: database.clauses.length,
-          responseCount: database.responses.length,
-          contentHash: Math.random().toString(16).slice(2, 10),
-        };
-        database.versions.unshift(version);
-        createAudit(
-          database,
-          input.actor,
-          "汇总签字定稿",
-          version.id,
-          `${version.version} ${version.label} 已锁定，签署人 ${input.actor}。`,
+    ) => {
+      requireRole(input.role, ["chair"]);
+      if (input.label.trim().length < 4) {
+        throw new Error("版本名称至少需要 4 个字符。");
+      }
+      const result = reviewDataStore.finalize({
+        label: input.label.trim(),
+        actor: input.actor,
+        baseRevision: input.baseRevision,
+      });
+      if (result.status === "conflict") {
+        throw new GraphQLError(
+          `定稿与最新修订号冲突：本次基于 r${result.attempt.baseRevision}，当前已为 r${result.attempt.currentRevision}，${result.attempt.conflicts.length} 项变更先到。尝试已保留，请基于最新修订号重发。`,
+          {
+            extensions: {
+              code: "VERSION_CONFLICT",
+              attemptId: result.attempt.id,
+              currentRevision: result.attempt.currentRevision,
+            },
+          },
         );
-        return version;
-      }),
+      }
+      return result.version;
+    },
     resetReviewData: () => {
       reviewDataStore.reset();
       return true;

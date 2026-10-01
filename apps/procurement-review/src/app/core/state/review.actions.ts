@@ -6,7 +6,7 @@ import type {
   ClarificationResponseInput,
   FinalizeVersionInput,
   ReviewRole,
-  ReviewState,
+  WorkspaceSlice,
 } from "../models/review.models";
 
 export const ReviewActions = createActionGroup({
@@ -14,10 +14,7 @@ export const ReviewActions = createActionGroup({
   events: {
     "Load Review Data": emptyProps(),
     "Load Review Data Success": props<{
-      workspace: Pick<
-        ReviewState,
-        "clauses" | "versions" | "auditLogs" | "dashboard" | "suppliers"
-      >;
+      workspace: WorkspaceSlice;
       toast?: string;
     }>(),
     "Load Review Data Failure": props<{ error: string }>(),
@@ -29,6 +26,12 @@ export const ReviewActions = createActionGroup({
     "Request Clarification": props<{ input: ClarificationInput }>(),
     "Respond Clarification": props<{ input: ClarificationResponseInput }>(),
     "Finalize Version": props<{ input: FinalizeVersionInput }>(),
+    "Finalize Version Conflict": props<{
+      workspace: WorkspaceSlice;
+      attemptId?: string;
+      message: string;
+    }>(),
+    "Dismiss Finalize Conflict": emptyProps(),
     "Reset Review Data": emptyProps(),
   },
 });

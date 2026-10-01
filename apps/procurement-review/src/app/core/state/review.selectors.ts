@@ -25,6 +25,21 @@ export const selectAuditLogs = createSelector(
   (state) => state.auditLogs,
 );
 
+export const selectFinalizeAttempts = createSelector(
+  selectReviewState,
+  (state) => state.finalizeAttempts,
+);
+
+export const selectRevision = createSelector(
+  selectReviewState,
+  (state) => state.revision,
+);
+
+export const selectFinalizeConflict = createSelector(
+  selectReviewState,
+  (state) => state.finalizeConflict,
+);
+
 export const selectDashboard = createSelector(
   selectReviewState,
   (state) => state.dashboard,

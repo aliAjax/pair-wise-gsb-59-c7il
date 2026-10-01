@@ -98,6 +98,7 @@
           <th>操作人</th>
           <th>动作</th>
           <th>对象</th>
+          <th>修订号</th>
           <th>详情</th>
         </tr>
       </ng-template>
@@ -109,12 +110,13 @@
             <span class="table-primary">{{ log.action }}</span>
           </td>
           <td class="mono">{{ log.entity }}</td>
+          <td class="mono">r{{ log.revision }}</td>
           <td>{{ log.detail }}</td>
         </tr>
       </ng-template>
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="5">没有符合条件的审计事件。</td>
+          <td colspan="6">没有符合条件的审计事件。</td>
         </tr>
       </ng-template>
     </p-table>

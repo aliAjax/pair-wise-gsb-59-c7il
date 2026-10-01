@@ -11,6 +11,7 @@ export type ReviewRole =
   | "chair";
 export type ClarificationStatus = "open" | "responded" | "overdue";
 export type VersionStatus = "draft" | "finalized";
+export type FinalizeAttemptStatus = "finalized" | "conflicted";
 
 export interface ReviewerOpinion {
   id: string;
@@ -72,17 +73,25 @@ export interface ClauseTreeNode extends Clause {
   children: ClauseTreeNode[];
 }
 
+export interface VersionSnapshot {
+  revision: number;
+  takenAt: string;
+  responses: SupplierResponse[];
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
   label: string;
   status: VersionStatus;
+  revision: number;
   createdAt: string;
   createdBy: string;
   signedBy: string[];
   clauseCount: number;
   responseCount: number;
   contentHash: string;
+  snapshot?: VersionSnapshot;
 }
 
 export interface AuditLog {
@@ -92,6 +101,41 @@ export interface AuditLog {
   action: string;
   entity: string;
   detail: string;
+  revision: number;
+}
+
+export interface ConflictEntry {
+  revision: number;
+  actor: string;
+  action: string;
+  entity: string;
+  detail: string;
+}
+
+export interface FinalizeAttempt {
+  id: string;
+  at: string;
+  actor: string;
+  label: string;
+  baseRevision: number;
+  currentRevision: number;
+  status: FinalizeAttemptStatus;
+  versionId?: string;
+  conflicts: ConflictEntry[];
+}
+
+export interface HashVerification {
+  versionId: string;
+  storedHash: string;
+  recomputedHash: string;
+  matches: boolean;
+  snapshotRevision: number;
+  snapshotTakenAt: string;
+}
+
+export interface FinalizeConflict {
+  attemptId?: string;
+  message: string;
 }
 
 export interface DashboardStats {
@@ -120,8 +164,10 @@ export interface ReviewState {
   clauses: Clause[];
   versions: ReviewVersion[];
   auditLogs: AuditLog[];
+  finalizeAttempts: FinalizeAttempt[];
   dashboard?: DashboardStats;
   suppliers: Supplier[];
+  revision: number;
   filters: ClauseFilters;
   role: ReviewRole;
   selectedSupplierIds: string[];
@@ -129,16 +175,22 @@ export interface ReviewState {
   saving: boolean;
   error?: string;
   toast?: string;
+  finalizeConflict?: FinalizeConflict;
 }
 
+export type WorkspaceSlice = Pick<
+  ReviewState,
+  | "clauses"
+  | "versions"
+  | "auditLogs"
+  | "finalizeAttempts"
+  | "dashboard"
+  | "suppliers"
+  | "revision"
+>;
+
 export interface WorkspaceQueryResult {
-  workspace: {
-    clauses: Clause[];
-    versions: ReviewVersion[];
-    auditLogs: AuditLog[];
-    dashboard: DashboardStats;
-    suppliers: Supplier[];
-  };
+  workspace: WorkspaceSlice;
 }
 
 export interface AssessmentInput {
@@ -167,6 +219,7 @@ export interface FinalizeVersionInput {
   label: string;
   actor: string;
   role: ReviewRole;
+  baseRevision: number;
 }
 
 export const roleProfiles: Record<ReviewRole, { name: string; label: string }> = {

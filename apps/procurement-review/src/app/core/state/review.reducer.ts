@@ -6,7 +6,9 @@ export const initialReviewState: ReviewState = {
   clauses: [],
   versions: [],
   auditLogs: [],
+  finalizeAttempts: [],
   suppliers: [],
+  revision: 0,
   filters: {
     keyword: "",
     category: "",
@@ -35,6 +37,7 @@ export const reviewReducer = createReducer(
       saving: false,
       error: undefined,
       toast,
+      finalizeConflict: undefined,
     }),
   ),
   on(ReviewActions.loadReviewDataFailure, (state, { error }) => ({
@@ -42,6 +45,21 @@ export const reviewReducer = createReducer(
     loading: false,
     saving: false,
     error,
+  })),
+  on(
+    ReviewActions.finalizeVersionConflict,
+    (state, { workspace, attemptId, message }) => ({
+      ...state,
+      ...workspace,
+      loading: false,
+      saving: false,
+      error: undefined,
+      finalizeConflict: { attemptId, message },
+    }),
+  ),
+  on(ReviewActions.dismissFinalizeConflict, (state) => ({
+    ...state,
+    finalizeConflict: undefined,
   })),
   on(ReviewActions.setRole, (state, { role }) => ({
     ...state,
@@ -81,6 +99,7 @@ export const reviewReducer = createReducer(
       saving: true,
       error: undefined,
       toast: undefined,
+      finalizeConflict: undefined,
     }),
   ),
 );

@@ -1,14 +1,17 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { computeSnapshotHash } from "./hash";
 import type {
   AuditLog,
   Clarification,
   Clause,
   ComplianceStatus,
+  FinalizeAttempt,
   ReviewDatabase,
+  ReviewVersion,
   ReviewRole,
-  ReviewerOpinion,
   SupplierResponse,
+  VersionSnapshot,
 } from "./types";
 
 const clauses: Clause[] = [
@@ -227,6 +230,60 @@ const reviewFactories: Array<{
   createdAt: string;
 }> = [
   {
+    responseId: "C001-SUP-A",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "组织架构与职责界面完整，进度控制机制可执行。",
+    createdAt: "2026-09-28T09:40:00+08:00",
+  },
+  {
+    responseId: "C001-SUP-A",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "风险应对机制覆盖主要实施风险，同意符合。",
+    createdAt: "2026-09-28T10:05:00+08:00",
+  },
+  {
+    responseId: "C001-SUP-B",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "实施方法描述清晰，项目组织满足要求。",
+    createdAt: "2026-09-28T09:45:00+08:00",
+  },
+  {
+    responseId: "C001-SUP-B",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "职责界面与进度计划可核验，无偏离。",
+    createdAt: "2026-09-28T10:15:00+08:00",
+  },
+  {
+    responseId: "C001-SUP-C",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "组织方案基本完整，人员配置满足要求。",
+    createdAt: "2026-09-28T09:50:00+08:00",
+  },
+  {
+    responseId: "C001-SUP-C",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "clarification",
+    score: 0,
+    comment: "风险登记册缺少维护频次说明，建议澄清后确认。",
+    createdAt: "2026-09-28T10:30:00+08:00",
+  },
+  {
     responseId: "C002-SUP-A",
     reviewer: "陈评审",
     role: "reviewer_a",
@@ -243,6 +300,195 @@ const reviewFactories: Array<{
     score: 0,
     comment: "安全负责人项目经历需补充合同页或验收证明。",
     createdAt: "2026-09-28T10:25:00+08:00",
+  },
+  {
+    responseId: "C002-SUP-B",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "项目经理履历满足年限，关键岗位覆盖完整。",
+    createdAt: "2026-09-28T10:40:00+08:00",
+  },
+  {
+    responseId: "C002-SUP-B",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "人员社保与履历一致，关键人员配置达标。",
+    createdAt: "2026-09-28T11:05:00+08:00",
+  },
+  {
+    responseId: "C002-SUP-C",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "关键人员配置覆盖架构、开发、测试与安全。",
+    createdAt: "2026-09-28T10:50:00+08:00",
+  },
+  {
+    responseId: "C002-SUP-C",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "项目经理同类项目经验可核验，同意符合。",
+    createdAt: "2026-09-28T11:20:00+08:00",
+  },
+  {
+    responseId: "C005-SUP-A",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "接口遵循 HTTPS 与 OAuth 2.0，文档版本清晰。",
+    createdAt: "2026-09-28T13:30:00+08:00",
+  },
+  {
+    responseId: "C005-SUP-A",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "OpenAPI 文档与错误码说明完整，可互操作。",
+    createdAt: "2026-09-28T14:10:00+08:00",
+  },
+  {
+    responseId: "C005-SUP-B",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "deviation",
+    score: 0,
+    comment: "部分接口仍使用私有协议，未完全遵循标准。",
+    createdAt: "2026-09-28T13:45:00+08:00",
+  },
+  {
+    responseId: "C005-SUP-C",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "接口标准符合要求，版本兼容说明完整。",
+    createdAt: "2026-09-28T13:50:00+08:00",
+  },
+  {
+    responseId: "C005-SUP-C",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "协议遵循情况可核验，无偏离。",
+    createdAt: "2026-09-28T14:20:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-A",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "安全方案覆盖身份鉴别、访问控制与审计。",
+    createdAt: "2026-09-28T15:10:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-A",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "数据保护与安全运维措施完整，同意符合。",
+    createdAt: "2026-09-28T15:40:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-B",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "安全架构完整，审计留痕机制可验证。",
+    createdAt: "2026-09-28T15:20:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-B",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "访问控制模型清晰，满足安全保障要求。",
+    createdAt: "2026-09-28T15:55:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-C",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "安全运维流程完整，责任分工明确。",
+    createdAt: "2026-09-28T15:30:00+08:00",
+  },
+  {
+    responseId: "C007-SUP-C",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "身份鉴别与审计方案符合要求。",
+    createdAt: "2026-09-28T16:05:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-A",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "验收指标可测量，与服务水平承诺一致。",
+    createdAt: "2026-09-28T16:20:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-A",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "指标可复现，验收方法明确。",
+    createdAt: "2026-09-28T16:45:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-B",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "验收指标量化完整，测试方法可复现。",
+    createdAt: "2026-09-28T16:30:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-B",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "指标与采购需求服务水平一致，同意符合。",
+    createdAt: "2026-09-28T16:55:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-C",
+    reviewer: "陈评审",
+    role: "reviewer_a",
+    decision: "compliant",
+    score: 0,
+    comment: "验收指标体系完整，测量方法明确。",
+    createdAt: "2026-09-28T16:35:00+08:00",
+  },
+  {
+    responseId: "C011-SUP-C",
+    reviewer: "李评审",
+    role: "reviewer_b",
+    decision: "compliant",
+    score: 0,
+    comment: "指标可测量、可复现，无偏离。",
+    createdAt: "2026-09-28T17:05:00+08:00",
   },
   {
     responseId: "C003-SUP-A",
@@ -369,32 +615,47 @@ const responses: SupplierResponse[] = clauses.flatMap((clause, clauseIndex) =>
   ),
 );
 
-const versions = [
-  {
-    id: "VER-001",
-    version: "V1",
-    label: "初审问题定位版本",
-    status: "finalized" as const,
-    createdAt: "2026-09-25T17:30:00+08:00",
-    createdBy: "采购工作组",
-    signedBy: ["采购负责人", "技术评审组长"],
-    clauseCount: clauses.length,
-    responseCount: responses.length,
-    contentHash: "a84f2d17",
-  },
-  {
-    id: "VER-002",
-    version: "V2",
-    label: "澄清与评分复核工作版",
-    status: "draft" as const,
-    createdAt: "2026-09-29T08:10:00+08:00",
-    createdBy: "采购工作组",
-    signedBy: [],
-    clauseCount: clauses.length,
-    responseCount: responses.length,
-    contentHash: "d91c6b42",
-  },
-];
+const buildSeedVersions = (
+  seedResponses: SupplierResponse[],
+): { versions: ReviewVersion[]; revision: number } => {
+  const v1Snapshot: VersionSnapshot = {
+    revision: 1,
+    takenAt: "2026-09-25T17:30:00+08:00",
+    responses: structuredClone(seedResponses),
+  };
+  return {
+    revision: 2,
+    versions: [
+      {
+        id: "VER-002",
+        version: "V2",
+        label: "澄清与评分复核工作版",
+        status: "draft" as const,
+        revision: 2,
+        createdAt: "2026-09-29T08:10:00+08:00",
+        createdBy: "采购工作组",
+        signedBy: [],
+        clauseCount: clauses.length,
+        responseCount: seedResponses.length,
+        contentHash: "",
+      },
+      {
+        id: "VER-001",
+        version: "V1",
+        label: "初审问题定位版本",
+        status: "finalized" as const,
+        revision: 1,
+        createdAt: "2026-09-25T17:30:00+08:00",
+        createdBy: "采购工作组",
+        signedBy: ["采购负责人", "技术评审组长"],
+        clauseCount: clauses.length,
+        responseCount: seedResponses.length,
+        contentHash: computeSnapshotHash(v1Snapshot),
+        snapshot: v1Snapshot,
+      },
+    ],
+  };
+};
 
 const auditLogs: AuditLog[] = [
   {
@@ -404,6 +665,7 @@ const auditLogs: AuditLog[] = [
     action: "版本定稿",
     entity: "VER-001",
     detail: "初审问题定位版本签署锁定，共覆盖 11 条技术条款。",
+    revision: 1,
   },
   {
     id: "AUD-002",
@@ -412,6 +674,7 @@ const auditLogs: AuditLog[] = [
     action: "发起澄清",
     entity: "CL-001",
     detail: "要求华云数科补充关键人员项目经历证明。",
+    revision: 2,
   },
   {
     id: "AUD-003",
@@ -420,6 +683,7 @@ const auditLogs: AuditLog[] = [
     action: "提交独立意见",
     entity: "C002-SUP-A",
     detail: "建议待澄清，与陈评审的符合结论形成分歧。",
+    revision: 2,
   },
   {
     id: "AUD-004",
@@ -428,16 +692,38 @@ const auditLogs: AuditLog[] = [
     action: "创建工作版本",
     entity: "VER-002",
     detail: "创建 V2 工作版本，保留 V1 定稿快照。",
+    revision: 2,
   },
 ];
 
-const buildSeed = (): ReviewDatabase => ({
-  clauses: structuredClone(clauses),
-  responses: structuredClone(responses),
-  versions: structuredClone(versions),
-  auditLogs: structuredClone(auditLogs),
-  suppliers: structuredClone(suppliers),
-});
+const buildSeed = (): ReviewDatabase => {
+  const seedResponses = structuredClone(responses);
+  const { versions: seedVersions, revision } = buildSeedVersions(seedResponses);
+  return {
+    clauses: structuredClone(clauses),
+    responses: seedResponses,
+    versions: seedVersions,
+    auditLogs: structuredClone(auditLogs),
+    finalizeAttempts: [],
+    suppliers: structuredClone(suppliers),
+    revision,
+  };
+};
+
+export interface FinalizeCommand {
+  label: string;
+  actor: string;
+  baseRevision: number;
+}
+
+export type FinalizeResult =
+  | { status: "finalized"; version: ReviewVersion }
+  | { status: "conflict"; attempt: FinalizeAttempt };
+
+const formatShortfalls = (items: string[]): string =>
+  items.length > 5
+    ? `${items.slice(0, 5).join("；")} 等 ${items.length} 项`
+    : items.join("；");
 
 class ReviewDataStore {
   private readonly runtimePath = join(process.cwd(), "server", "runtime-data.json");
@@ -446,9 +732,15 @@ class ReviewDataStore {
   constructor() {
     if (existsSync(this.runtimePath)) {
       try {
-        this.data = JSON.parse(
+        const parsed = JSON.parse(
           readFileSync(this.runtimePath, "utf8"),
         ) as ReviewDatabase;
+        // 旧版运行时数据缺少修订号字段，直接按新种子重建，避免脏数据混入。
+        this.data =
+          typeof parsed.revision === "number" &&
+          Array.isArray(parsed.finalizeAttempts)
+            ? parsed
+            : buildSeed();
       } catch {
         this.data = buildSeed();
       }
@@ -462,15 +754,176 @@ class ReviewDataStore {
   }
 
   mutate<T>(work: (database: ReviewDatabase) => T): T {
-    const result = work(this.data);
-    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
-    return result;
+    const before = structuredClone(this.data);
+    this.data.revision += 1;
+    try {
+      const result = work(this.data);
+      this.persist();
+      return result;
+    } catch (error) {
+      this.data = before;
+      throw error;
+    }
+  }
+
+  /**
+   * 按当前修订号定稿：
+   * 1. 未完成澄清、否决项缺少两名评审员结论时直接拒绝（不留下痕迹）；
+   * 2. baseRevision 落后于当前修订号时判定为冲突，保留尝试与冲突清单后返回；
+   * 3. 否则锁定当前工作版，保存响应/意见/澄清快照并生成可复算哈希，
+   *    同时开启下一工作版承接晚到的提交。
+   */
+  finalize(command: FinalizeCommand): FinalizeResult {
+    const database = this.data;
+    const blockingClarifications = database.responses
+      .flatMap((response) => response.clarifications)
+      .filter(
+        (clarification) =>
+          clarification.status === "open" ||
+          clarification.status === "overdue",
+      );
+    if (blockingClarifications.length > 0) {
+      throw new Error(
+        `仍有 ${blockingClarifications.length} 项未完成澄清，不能定稿。`,
+      );
+    }
+    const clauseById = new Map(
+      database.clauses.map((clause) => [clause.id, clause]),
+    );
+    const mandatoryShortfalls = database.responses
+      .filter((response) => {
+        const clause = clauseById.get(response.clauseId);
+        return clause?.type === "mandatory" && response.reviews.length < 2;
+      })
+      .map((response) => {
+        const clause = clauseById.get(response.clauseId);
+        return `${clause?.code ?? response.clauseId}（${response.supplierName}，仅 ${response.reviews.length} 名评审员结论）`;
+      });
+    if (mandatoryShortfalls.length > 0) {
+      throw new Error(
+        `否决项需两名评审员结论方可定稿，尚未满足：${formatShortfalls(mandatoryShortfalls)}。`,
+      );
+    }
+    const draft = database.versions.find(
+      (version) => version.status === "draft",
+    );
+    if (!draft) {
+      throw new Error("当前没有可定稿的工作版本。");
+    }
+
+    if (command.baseRevision !== database.revision) {
+      database.revision += 1;
+      const conflicts = database.auditLogs
+        .filter((log) => log.revision > command.baseRevision)
+        .map((log) => ({
+          revision: log.revision,
+          actor: log.actor,
+          action: log.action,
+          entity: log.entity,
+          detail: log.detail,
+        }));
+      const attempt: FinalizeAttempt = {
+        id: createAttemptId(),
+        at: new Date().toISOString(),
+        actor: command.actor,
+        label: command.label,
+        baseRevision: command.baseRevision,
+        currentRevision: database.revision,
+        status: "conflicted",
+        conflicts,
+      };
+      database.finalizeAttempts.unshift(attempt);
+      createAudit(
+        database,
+        command.actor,
+        "定稿冲突",
+        attempt.id,
+        `「${command.label}」基于修订号 r${command.baseRevision}，当前修订号已为 r${database.revision}，${conflicts.length} 项变更先到，尝试已保留，可基于最新修订号重发。`,
+      );
+      this.persist();
+      return { status: "conflict", attempt };
+    }
+
+    database.revision += 1;
+    const now = new Date().toISOString();
+    const snapshot: VersionSnapshot = {
+      revision: database.revision,
+      takenAt: now,
+      responses: structuredClone(database.responses),
+    };
+    const contentHash = computeSnapshotHash(snapshot);
+    draft.status = "finalized";
+    draft.label = command.label;
+    draft.revision = database.revision;
+    draft.createdAt = now;
+    draft.createdBy = command.actor;
+    draft.signedBy = [command.actor];
+    draft.clauseCount = database.clauses.length;
+    draft.responseCount = database.responses.length;
+    draft.contentHash = contentHash;
+    draft.snapshot = snapshot;
+
+    const nextNumber =
+      database.versions.reduce((maximum, version) => {
+        const numeric = Number(version.version.replace(/\D/g, ""));
+        return Number.isFinite(numeric)
+          ? Math.max(maximum, numeric)
+          : maximum;
+      }, 0) + 1;
+    const nextDraft: ReviewVersion = {
+      id: createVersionId(),
+      version: `V${nextNumber}`,
+      label: `${draft.version} 定稿后工作版`,
+      status: "draft",
+      revision: database.revision,
+      createdAt: now,
+      createdBy: command.actor,
+      signedBy: [],
+      clauseCount: database.clauses.length,
+      responseCount: database.responses.length,
+      contentHash: "",
+    };
+    database.versions.unshift(nextDraft);
+
+    const attempt: FinalizeAttempt = {
+      id: createAttemptId(),
+      at: now,
+      actor: command.actor,
+      label: command.label,
+      baseRevision: command.baseRevision,
+      currentRevision: database.revision,
+      status: "finalized",
+      versionId: draft.id,
+      conflicts: [],
+    };
+    database.finalizeAttempts.unshift(attempt);
+
+    createAudit(
+      database,
+      command.actor,
+      "汇总签字定稿",
+      draft.id,
+      `${draft.version} ${draft.label} 已按修订号 r${database.revision} 定稿锁定，内容哈希 ${contentHash.slice(0, 12)}…，签署人 ${command.actor}。`,
+    );
+    createAudit(
+      database,
+      command.actor,
+      "创建工作版本",
+      nextDraft.id,
+      `定稿后自动开启 ${nextDraft.version} 工作版，此后到达的提交记入该版本，不回写已冻结的 ${draft.version}。`,
+    );
+    this.persist();
+    return { status: "finalized", version: structuredClone(draft) };
   }
 
   reset(): ReviewDatabase {
     this.data = buildSeed();
-    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
+    this.persist();
     return this.snapshot();
+  }
+
+  private persist(): void {
+    writeFileSync(this.runtimePath, JSON.stringify(this.data, null, 2), "utf8");
   }
 }
 
@@ -490,6 +943,7 @@ export const createAudit = (
     action,
     entity,
     detail,
+    revision: database.revision,
   });
 };
 
@@ -498,3 +952,9 @@ export const createOpinionId = (): string =>
 
 export const createClarificationId = (): string =>
   `CL-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+export const createVersionId = (): string =>
+  `VER-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+export const createAttemptId = (): string =>
+  `ATT-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;

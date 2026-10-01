@@ -11,6 +11,7 @@ export type ReviewRole =
   | "chair";
 export type ClarificationStatus = "open" | "responded" | "overdue";
 export type VersionStatus = "draft" | "finalized";
+export type FinalizeAttemptStatus = "finalized" | "conflicted";
 
 export interface Clause {
   id: string;
@@ -66,17 +67,25 @@ export interface SupplierResponse {
   clarifications: Clarification[];
 }
 
+export interface VersionSnapshot {
+  revision: number;
+  takenAt: string;
+  responses: SupplierResponse[];
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
   label: string;
   status: VersionStatus;
+  revision: number;
   createdAt: string;
   createdBy: string;
   signedBy: string[];
   clauseCount: number;
   responseCount: number;
   contentHash: string;
+  snapshot?: VersionSnapshot;
 }
 
 export interface AuditLog {
@@ -86,6 +95,27 @@ export interface AuditLog {
   action: string;
   entity: string;
   detail: string;
+  revision: number;
+}
+
+export interface ConflictEntry {
+  revision: number;
+  actor: string;
+  action: string;
+  entity: string;
+  detail: string;
+}
+
+export interface FinalizeAttempt {
+  id: string;
+  at: string;
+  actor: string;
+  label: string;
+  baseRevision: number;
+  currentRevision: number;
+  status: FinalizeAttemptStatus;
+  versionId?: string;
+  conflicts: ConflictEntry[];
 }
 
 export interface DashboardStats {
@@ -103,7 +133,9 @@ export interface ReviewDatabase {
   responses: SupplierResponse[];
   versions: ReviewVersion[];
   auditLogs: AuditLog[];
+  finalizeAttempts: FinalizeAttempt[];
   suppliers: Array<{ id: string; name: string }>;
+  revision: number;
 }
 
 export interface AssessmentInput {
@@ -132,4 +164,5 @@ export interface FinalizeVersionInput {
   label: string;
   actor: string;
   role: ReviewRole;
+  baseRevision: number;
 }
