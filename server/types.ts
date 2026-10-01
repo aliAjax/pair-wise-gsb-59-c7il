@@ -66,17 +66,25 @@ export interface SupplierResponse {
   clarifications: Clarification[];
 }
 
+export interface VersionSnapshot {
+  frozenAt: string;
+  responses: SupplierResponse[];
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
   label: string;
   status: VersionStatus;
+  revision: number;
   createdAt: string;
   createdBy: string;
   signedBy: string[];
   clauseCount: number;
   responseCount: number;
+  hashAlgorithm: string;
   contentHash: string;
+  snapshot?: VersionSnapshot;
 }
 
 export interface AuditLog {
@@ -86,6 +94,7 @@ export interface AuditLog {
   action: string;
   entity: string;
   detail: string;
+  revision: number;
 }
 
 export interface DashboardStats {
@@ -104,6 +113,24 @@ export interface ReviewDatabase {
   versions: ReviewVersion[];
   auditLogs: AuditLog[];
   suppliers: Array<{ id: string; name: string }>;
+  currentRevision: number;
+}
+
+export interface RevisionConflictItem {
+  revision: number;
+  at: string;
+  actor: string;
+  action: string;
+  entity: string;
+  detail: string;
+}
+
+export interface VersionHashVerification {
+  versionId: string;
+  revision: number;
+  contentHash: string;
+  recomputedHash: string;
+  matches: boolean;
 }
 
 export interface AssessmentInput {
@@ -113,6 +140,7 @@ export interface AssessmentInput {
   comment: string;
   reviewer: string;
   role: ReviewRole;
+  baseRevision: number;
 }
 
 export interface ClarificationInput {
@@ -120,12 +148,14 @@ export interface ClarificationInput {
   requestText: string;
   dueAt: string;
   actor: string;
+  baseRevision: number;
 }
 
 export interface ClarificationResponseInput {
   clarificationId: string;
   responseText: string;
   actor: string;
+  baseRevision: number;
 }
 
 export interface FinalizeVersionInput {

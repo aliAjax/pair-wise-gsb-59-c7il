@@ -102,6 +102,82 @@
   height: 3px;
 }
 
+.conflict-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.conflict-lead {
+  margin: 0;
+  color: #4b6168;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.conflict-list {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+
+  li {
+    display: grid;
+    gap: 5px;
+    padding: 10px 12px;
+    border: 1px solid #e0e7e9;
+    border-radius: 6px;
+    background: #fafcfc;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .mono {
+      color: #0b5e5b;
+      font-size: 12px;
+    }
+
+    strong {
+      color: #29464e;
+      font-size: 12px;
+    }
+
+    time {
+      margin-left: auto;
+      color: #74858a;
+      font-size: 11px;
+    }
+  }
+
+  .conflict-entity {
+    color: #74858a;
+    font-size: 11px;
+  }
+
+  p {
+    margin: 0;
+    color: #536970;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .conflict-empty {
+    color: #74858a;
+    font-size: 12px;
+  }
+}
+
+.conflict-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (max-width: 1180px) {
   .app-header {
     grid-template-columns: 1fr auto;

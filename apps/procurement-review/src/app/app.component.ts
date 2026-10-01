@@ -5,12 +5,14 @@ import {
   effect,
   inject,
 } from "@angular/core";
+import { DatePipe } from "@angular/common";
 import { FormControl, FormsModule, ReactiveFormsModule } from "@angular/forms";
 import { RouterLink, RouterLinkActive, RouterOutlet } from "@angular/router";
 import { Store } from "@ngrx/store";
 import { toSignal } from "@angular/core/rxjs-interop";
 import { MessageService } from "primeng/api";
 import { ButtonModule } from "primeng/button";
+import { DialogModule } from "primeng/dialog";
 import { ProgressBarModule } from "primeng/progressbar";
 import { SelectModule } from "primeng/select";
 import { ToastModule } from "primeng/toast";
@@ -20,6 +22,7 @@ import {
 } from "./core/models/review.models";
 import { ReviewActions } from "./core/state/review.actions";
 import {
+  selectConflict,
   selectError,
   selectLoading,
   selectRole,
@@ -30,12 +33,14 @@ import {
 @Component({
   selector: "app-root",
   imports: [
+    DatePipe,
     FormsModule,
     ReactiveFormsModule,
     RouterLink,
     RouterLinkActive,
     RouterOutlet,
     ButtonModule,
+    DialogModule,
     ProgressBarModule,
     SelectModule,
     ToastModule,
@@ -70,6 +75,9 @@ export class AppComponent implements OnInit {
   readonly error = toSignal(this.store.select(selectError), {
     initialValue: undefined,
   });
+  readonly conflict = toSignal(this.store.select(selectConflict), {
+    initialValue: undefined,
+  });
   readonly roleOptions = Object.entries(roleProfiles).map(([value, profile]) => ({
     value: value as ReviewRole,
     label: `${profile.label} · ${profile.name}`,
@@ -93,6 +101,20 @@ export class AppComponent implements OnInit {
 
   clearMessages(): void {
     this.store.dispatch(ReviewActions.clearToast());
+  }
+
+  retryConflict(): void {
+    this.store.dispatch(ReviewActions.retryConflictedSubmission());
+  }
+
+  dismissConflict(): void {
+    this.store.dispatch(ReviewActions.dismissConflict());
+  }
+
+  onConflictVisibleChange(visible: boolean): void {
+    if (!visible) {
+      this.dismissConflict();
+    }
   }
 
   notify(message: string | undefined, key: string): void {

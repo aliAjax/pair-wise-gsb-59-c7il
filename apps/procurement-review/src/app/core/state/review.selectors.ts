@@ -50,6 +50,21 @@ export const selectSelectedSupplierIds = createSelector(
   (state) => state.selectedSupplierIds,
 );
 
+export const selectCurrentRevision = createSelector(
+  selectReviewState,
+  (state) => state.currentRevision,
+);
+
+export const selectConflict = createSelector(
+  selectReviewState,
+  (state) => state.conflict,
+);
+
+export const selectHashVerification = createSelector(
+  selectReviewState,
+  (state) => state.hashVerification,
+);
+
 export const selectLoading = createSelector(
   selectReviewState,
   (state) => state.loading,
@@ -190,6 +205,31 @@ export const selectPendingClarifications = createSelector(
           })),
       ),
     ),
+);
+
+/** 结论指「符合 / 偏离」；待澄清不算结论。 */
+export const countConcludingReviewers = (
+  response: SupplierResponse,
+): number =>
+  new Set(
+    response.reviews
+      .filter(
+        (review) =>
+          review.decision === "compliant" || review.decision === "deviation",
+      )
+      .map((review) => review.reviewer),
+  ).size;
+
+export const selectMandatoryConclusionGaps = createSelector(
+  selectClauses,
+  (clauses) =>
+    clauses
+      .filter((clause) => clause.type === "mandatory")
+      .flatMap((clause) =>
+        clause.responses
+          .filter((response) => countConcludingReviewers(response) < 2)
+          .map((response) => ({ clause, response })),
+      ),
 );
 
 export const selectReusedProofs = createSelector(

@@ -24,6 +24,10 @@
       <strong>{{ finalizedCount() }}</strong>
     </article>
     <article>
+      <span>当前工作修订号</span>
+      <strong>R{{ currentRevision() }}</strong>
+    </article>
+    <article>
       <span>待小组复核分歧</span>
       <strong class="danger">{{ differences().length }}</strong>
     </article>
@@ -38,23 +42,26 @@
       <div class="data-panel-header">
         <div>
           <h3>版本历史</h3>
-          <p>定稿版本保存内容哈希和签署人</p>
+          <p>定稿版本按修订号冻结快照，内容哈希可复算校验</p>
         </div>
       </div>
       <p-table [value]="versions()" responsiveLayout="scroll">
         <ng-template pTemplate="header">
           <tr>
             <th>版本</th>
+            <th>修订号</th>
             <th>名称</th>
             <th>状态</th>
             <th>响应项</th>
             <th>内容哈希</th>
             <th>创建信息</th>
+            <th>校验</th>
           </tr>
         </ng-template>
         <ng-template pTemplate="body" let-version>
           <tr>
             <td class="mono">{{ version.version }}</td>
+            <td class="mono">R{{ version.revision }}</td>
             <td>
               <span class="table-primary">{{ version.label }}</span>
               <div class="table-secondary">
@@ -69,12 +76,31 @@
                 {{ version.clauseCount }} 条条款
               </div>
             </td>
-            <td class="mono">{{ version.contentHash }}</td>
+            <td class="mono">
+              @if (version.contentHash) {
+                <span [title]="version.hashAlgorithm + ':' + version.contentHash">
+                  {{ version.contentHash.slice(0, 12) }}…
+                </span>
+              } @else {
+                <span class="table-secondary">定稿时生成</span>
+              }
+            </td>
             <td>
               {{ version.createdBy }}
               <div class="table-secondary">
                 {{ version.createdAt | date: "yyyy-MM-dd HH:mm" }}
               </div>
+            </td>
+            <td>
+              @if (version.status === "finalized") {
+                <p-button
+                  label="复算哈希"
+                  icon="pi pi-shield"
+                  size="small"
+                  [outlined]="true"
+                  (onClick)="verifyHash(version)"
+                />
+              }
             </td>
           </tr>
         </ng-template>
@@ -193,8 +219,42 @@
         placeholder="例如：技术响应符合性评审汇总"
       />
     </div>
+    <ul class="finalize-gates">
+      <li>
+        <span>定稿修订号</span>
+        <strong>R{{ currentRevision() }}</strong>
+      </li>
+      <li [class.blocked]="pendingClarifications().length > 0">
+        <span>未完成澄清</span>
+        <strong>{{ pendingClarifications().length }} 项</strong>
+      </li>
+      <li [class.blocked]="mandatoryGaps().length > 0">
+        <span>否决项缺两名评审员结论</span>
+        <strong>{{ mandatoryGaps().length }} 项</strong>
+      </li>
+    </ul>
+    @if (mandatoryGaps().length > 0) {
+      <div class="gap-list">
+        @for (
+          gap of mandatoryGaps().slice(0, 4);
+          track gap.response.id
+        ) {
+          <span>
+            {{ gap.clause.code }} · {{ gap.response.supplierName }}
+          </span>
+        }
+        @if (mandatoryGaps().length > 4) {
+          <span>等 {{ mandatoryGaps().length }} 项</span>
+        }
+      </div>
+    }
     <div class="finalize-note">
-      定稿前系统会检查未完成澄清。定稿后当前版本会生成内容哈希并锁定签署人。
+      定稿将按当前修订号 R{{ currentRevision() }}
+      冻结供应商响应、独立评审意见和澄清记录快照，并生成可复算的内容哈希；
+      定稿后晚到的提交不能改写该版本，会自动进入下一工作版并写入审计。
+      @if (finalizeBlockers().length > 0) {
+        当前仍被拦截：{{ finalizeBlockers().join("；") }}。
+      }
     </div>
     <div class="inline-actions dialog-actions">
       <p-button
@@ -211,6 +271,45 @@
       />
     </div>
   </form>
+</p-dialog>
+
+<p-dialog
+  header="内容哈希复算校验"
+  [modal]="true"
+  [visible]="!!hashVerification()"
+  (visibleChange)="closeHashVerification()"
+  [style]="{ width: 'min(620px, 94vw)' }"
+>
+  @if (hashVerification(); as verification) {
+    <div class="hash-check">
+      <p-tag
+        [value]="verification.matches ? '校验通过：哈希一致' : '校验失败：哈希不一致'"
+        [severity]="verification.matches ? 'success' : 'danger'"
+      />
+      <p class="hash-check-lead">
+        按修订号 R{{ verification.revision }}
+        与冻结快照重新计算内容哈希，用于确认定稿批次未被改写。
+      </p>
+      <dl>
+        <div>
+          <dt>定稿保存哈希</dt>
+          <dd class="mono">{{ verification.contentHash }}</dd>
+        </div>
+        <div>
+          <dt>快照复算哈希</dt>
+          <dd class="mono">{{ verification.recomputedHash }}</dd>
+        </div>
+      </dl>
+      <div class="inline-actions dialog-actions">
+        <p-button
+          label="关闭"
+          severity="secondary"
+          [outlined]="true"
+          (onClick)="closeHashVerification()"
+        />
+      </div>
+    </div>
+  }
 </p-dialog>
 
 <p-dialog

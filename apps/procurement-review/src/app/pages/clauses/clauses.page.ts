@@ -38,6 +38,7 @@ import { ReviewActions } from "../../core/state/review.actions";
 import {
   hasReviewDifference,
   selectClauseTree,
+  selectCurrentRevision,
   selectRole,
 } from "../../core/state/review.selectors";
 import {
@@ -80,6 +81,9 @@ export class ClausesPage {
   readonly treeNodes = computed(() => this.toTreeNodes(this.clauseTree()));
   readonly role = toSignal(this.store.select(selectRole), {
     initialValue: "reviewer_a",
+  });
+  readonly currentRevision = toSignal(this.store.select(selectCurrentRevision), {
+    initialValue: 0,
   });
   readonly selectedTreeKey = signal<string | null>(null);
   readonly selectedSupplierId = signal<string | null>(null);
@@ -216,6 +220,7 @@ export class ClausesPage {
           comment: value.comment,
           reviewer: roleProfiles[this.role()].name,
           role: this.role(),
+          baseRevision: this.currentRevision(),
         },
       }),
     );
@@ -243,6 +248,7 @@ export class ClausesPage {
           requestText: value.requestText,
           dueAt: value.dueAt.toISOString(),
           actor: roleProfiles[this.role()].name,
+          baseRevision: this.currentRevision(),
         },
       }),
     );

@@ -19,12 +19,16 @@ import {
   roleProfiles,
   type Clarification,
   type Clause,
+  type ReviewVersion,
   type SupplierResponse,
 } from "../../core/models/review.models";
 import { ReviewActions } from "../../core/state/review.actions";
 import {
   hasReviewDifference,
   selectClauses,
+  selectCurrentRevision,
+  selectHashVerification,
+  selectMandatoryConclusionGaps,
   selectPendingClarifications,
   selectRole,
   selectVersions,
@@ -73,9 +77,20 @@ export class ReviewPage {
   readonly role = toSignal(this.store.select(selectRole), {
     initialValue: "reviewer_a",
   });
+  readonly currentRevision = toSignal(this.store.select(selectCurrentRevision), {
+    initialValue: 0,
+  });
   readonly pendingClarifications = toSignal(
     this.store.select(selectPendingClarifications),
     { initialValue: [] as PendingClarification[] },
+  );
+  readonly mandatoryGaps = toSignal(
+    this.store.select(selectMandatoryConclusionGaps),
+    { initialValue: [] as Array<{ clause: Clause; response: SupplierResponse }> },
+  );
+  readonly hashVerification = toSignal(
+    this.store.select(selectHashVerification),
+    { initialValue: undefined },
   );
   readonly finalizeVisible = signal(false);
   readonly responseVisible = signal(false);
@@ -94,6 +109,18 @@ export class ReviewPage {
   readonly finalizedCount = computed(
     () => this.versions().filter((version) => version.status === "finalized").length,
   );
+  readonly finalizeBlockers = computed(() => {
+    const blockers: string[] = [];
+    const pending = this.pendingClarifications().length;
+    if (pending > 0) {
+      blockers.push(`${pending} 项澄清未完成`);
+    }
+    const gaps = this.mandatoryGaps().length;
+    if (gaps > 0) {
+      blockers.push(`${gaps} 项否决项未满两名评审员结论`);
+    }
+    return blockers;
+  });
 
   readonly finalizeForm = new FormGroup({
     label: new FormControl("", {
@@ -130,6 +157,16 @@ export class ReviewPage {
     this.finalizeVisible.set(false);
   }
 
+  verifyHash(version: ReviewVersion): void {
+    this.store.dispatch(
+      ReviewActions.verifyVersionHash({ versionId: version.id }),
+    );
+  }
+
+  closeHashVerification(): void {
+    this.store.dispatch(ReviewActions.clearHashVerification());
+  }
+
   openResponse(item: PendingClarification): void {
     this.selectedClarification.set(item);
     this.responseForm.reset({ responseText: "" });
@@ -152,6 +189,7 @@ export class ReviewPage {
           clarificationId: item.clarification.id,
           responseText: this.responseForm.controls.responseText.value,
           actor: roleProfiles[this.role()].name,
+          baseRevision: this.currentRevision(),
         },
       }),
     );

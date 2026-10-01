@@ -7,9 +7,11 @@ import type {
   ComplianceStatus,
   ReviewDatabase,
   ReviewRole,
+  ReviewVersion,
   ReviewerOpinion,
   SupplierResponse,
 } from "./types";
+import { computeVersionHash, HASH_ALGORITHM } from "./versioning";
 
 const clauses: Clause[] = [
   {
@@ -282,6 +284,80 @@ const reviewFactories: Array<{
   },
 ];
 
+const mandatoryReviewComments: Record<string, { first: string; second: string }> = {
+  C001: {
+    first: "项目组织与职责界面描述完整，进度控制机制可执行。",
+    second: "实施方法与风险应对机制复核一致，结论符合采购要求。",
+  },
+  C002: {
+    first: "关键人员履历与社保材料一致，年限满足要求。",
+    second: "人员配置覆盖架构、开发、测试与安全，结论符合。",
+  },
+  C005: {
+    first: "接口遵循 HTTPS 与 OpenAPI 3.x，版本兼容说明完整。",
+    second: "错误码与版本兼容策略复核通过，结论符合。",
+  },
+  C007: {
+    first: "身份鉴别、访问控制与审计设计覆盖安全要求。",
+    second: "数据保护与安全运维措施复核一致，结论符合。",
+  },
+  C011: {
+    first: "验收指标可测量、可复现，与服务水平保持一致。",
+    second: "指标口径与采购需求复核一致，结论符合。",
+  },
+};
+
+/** 这些否决项响应只有一名评审员结论，用于演示定稿拦截。 */
+const singleConclusionResponses = new Set(["C007-SUP-C", "C011-SUP-B"]);
+
+const generatedMandatoryReviews: Array<{
+  responseId: string;
+  reviewer: string;
+  role: ReviewRole;
+  decision: ComplianceStatus;
+  score: number;
+  comment: string;
+  createdAt: string;
+}> = clauses
+  .filter((clause) => clause.type === "mandatory")
+  .flatMap((clause) => {
+    const comments = mandatoryReviewComments[clause.id];
+    if (!comments) {
+      return [];
+    }
+    return suppliers.flatMap((supplier) => {
+      const responseId = `${clause.id}-${supplier.id}`;
+      if (reviewFactories.some((item) => item.responseId === responseId)) {
+        return [];
+      }
+      const reviews = [
+        {
+          responseId,
+          reviewer: "陈评审",
+          role: "reviewer_a" as ReviewRole,
+          decision: "compliant" as ComplianceStatus,
+          score: 0,
+          comment: comments.first,
+          createdAt: "2026-09-28T15:20:00+08:00",
+        },
+      ];
+      if (!singleConclusionResponses.has(responseId)) {
+        reviews.push({
+          responseId,
+          reviewer: "李评审",
+          role: "reviewer_b" as ReviewRole,
+          decision: "compliant" as ComplianceStatus,
+          score: 0,
+          comment: comments.second,
+          createdAt: "2026-09-28T16:05:00+08:00",
+        });
+      }
+      return reviews;
+    });
+  });
+
+const allReviewFactories = [...reviewFactories, ...generatedMandatoryReviews];
+
 const clarifications: Clarification[] = [
   {
     id: "CL-001",
@@ -353,7 +429,7 @@ const makeResponse = (
     reviews: [],
     clarifications: [],
   };
-  base.reviews = reviewFactories
+  base.reviews = allReviewFactories
     .filter((item) => item.responseId === id)
     .map((item, index) => ({
       id: `OP-${id}-${index + 1}`,
@@ -369,32 +445,50 @@ const responses: SupplierResponse[] = clauses.flatMap((clause, clauseIndex) =>
   ),
 );
 
-const versions = [
-  {
-    id: "VER-001",
-    version: "V1",
-    label: "初审问题定位版本",
-    status: "finalized" as const,
-    createdAt: "2026-09-25T17:30:00+08:00",
-    createdBy: "采购工作组",
-    signedBy: ["采购负责人", "技术评审组长"],
-    clauseCount: clauses.length,
-    responseCount: responses.length,
-    contentHash: "a84f2d17",
-  },
-  {
-    id: "VER-002",
-    version: "V2",
-    label: "澄清与评分复核工作版",
-    status: "draft" as const,
-    createdAt: "2026-09-29T08:10:00+08:00",
-    createdBy: "采购工作组",
-    signedBy: [],
-    clauseCount: clauses.length,
-    responseCount: responses.length,
-    contentHash: "d91c6b42",
-  },
-];
+const SEED_REVISION = 2;
+
+const buildSeedVersions = (seedResponses: SupplierResponse[]): ReviewVersion[] => {
+  // V1 定稿于评审开始前，快照中尚无独立意见与澄清记录。
+  const v1SnapshotResponses = structuredClone(seedResponses).map((response) => ({
+    ...response,
+    reviews: [],
+    clarifications: [],
+  }));
+  return [
+    {
+      id: "VER-001",
+      version: "V1",
+      label: "初审问题定位版本",
+      status: "finalized",
+      revision: 1,
+      createdAt: "2026-09-25T17:30:00+08:00",
+      createdBy: "采购工作组",
+      signedBy: ["采购负责人", "技术评审组长"],
+      clauseCount: clauses.length,
+      responseCount: seedResponses.length,
+      hashAlgorithm: HASH_ALGORITHM,
+      contentHash: computeVersionHash(1, v1SnapshotResponses),
+      snapshot: {
+        frozenAt: "2026-09-25T17:30:00+08:00",
+        responses: v1SnapshotResponses,
+      },
+    },
+    {
+      id: "VER-002",
+      version: "V2",
+      label: "澄清与评分复核工作版",
+      status: "draft",
+      revision: SEED_REVISION,
+      createdAt: "2026-09-29T08:10:00+08:00",
+      createdBy: "采购工作组",
+      signedBy: [],
+      clauseCount: clauses.length,
+      responseCount: seedResponses.length,
+      hashAlgorithm: "",
+      contentHash: "",
+    },
+  ];
+};
 
 const auditLogs: AuditLog[] = [
   {
@@ -404,6 +498,7 @@ const auditLogs: AuditLog[] = [
     action: "版本定稿",
     entity: "VER-001",
     detail: "初审问题定位版本签署锁定，共覆盖 11 条技术条款。",
+    revision: 1,
   },
   {
     id: "AUD-002",
@@ -412,6 +507,7 @@ const auditLogs: AuditLog[] = [
     action: "发起澄清",
     entity: "CL-001",
     detail: "要求华云数科补充关键人员项目经历证明。",
+    revision: 2,
   },
   {
     id: "AUD-003",
@@ -420,6 +516,7 @@ const auditLogs: AuditLog[] = [
     action: "提交独立意见",
     entity: "C002-SUP-A",
     detail: "建议待澄清，与陈评审的符合结论形成分歧。",
+    revision: 2,
   },
   {
     id: "AUD-004",
@@ -428,16 +525,21 @@ const auditLogs: AuditLog[] = [
     action: "创建工作版本",
     entity: "VER-002",
     detail: "创建 V2 工作版本，保留 V1 定稿快照。",
+    revision: 2,
   },
 ];
 
-const buildSeed = (): ReviewDatabase => ({
-  clauses: structuredClone(clauses),
-  responses: structuredClone(responses),
-  versions: structuredClone(versions),
-  auditLogs: structuredClone(auditLogs),
-  suppliers: structuredClone(suppliers),
-});
+const buildSeed = (): ReviewDatabase => {
+  const seedResponses = structuredClone(responses);
+  return {
+    clauses: structuredClone(clauses),
+    responses: seedResponses,
+    versions: buildSeedVersions(seedResponses),
+    auditLogs: structuredClone(auditLogs),
+    suppliers: structuredClone(suppliers),
+    currentRevision: SEED_REVISION,
+  };
+};
 
 class ReviewDataStore {
   private readonly runtimePath = join(process.cwd(), "server", "runtime-data.json");
@@ -446,15 +548,29 @@ class ReviewDataStore {
   constructor() {
     if (existsSync(this.runtimePath)) {
       try {
-        this.data = JSON.parse(
+        const parsed = JSON.parse(
           readFileSync(this.runtimePath, "utf8"),
         ) as ReviewDatabase;
+        // 旧格式运行数据缺少修订号体系，直接按新种子重建。
+        this.data = ReviewDataStore.hasRevisionShape(parsed)
+          ? parsed
+          : buildSeed();
       } catch {
         this.data = buildSeed();
       }
     } else {
       this.data = buildSeed();
     }
+  }
+
+  private static hasRevisionShape(data: ReviewDatabase): boolean {
+    return (
+      typeof data.currentRevision === "number" &&
+      Array.isArray(data.versions) &&
+      data.versions.every(
+        (version) => typeof version.revision === "number",
+      )
+    );
   }
 
   snapshot(): ReviewDatabase {
@@ -482,6 +598,7 @@ export const createAudit = (
   action: string,
   entity: string,
   detail: string,
+  revision: number,
 ): void => {
   database.auditLogs.unshift({
     id: `AUD-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -490,6 +607,7 @@ export const createAudit = (
     action,
     entity,
     detail,
+    revision,
   });
 };
 
@@ -498,3 +616,8 @@ export const createOpinionId = (): string =>
 
 export const createClarificationId = (): string =>
   `CL-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+let versionSequence = 0;
+
+export const createVersionId = (): string =>
+  `VER-${Date.now()}-${(versionSequence += 1)}`;

@@ -80,9 +80,10 @@ export class AuditPage {
   }
 
   exportCsv(): void {
-    const header = ["时间", "操作人", "动作", "对象", "详情"];
+    const header = ["时间", "修订号", "操作人", "动作", "对象", "详情"];
     const rows = this.filteredLogs().map((log) => [
       log.at,
+      `R${log.revision}`,
       log.actor,
       log.action,
       log.entity,

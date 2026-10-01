@@ -95,6 +95,7 @@
       <ng-template pTemplate="header">
         <tr>
           <th>时间</th>
+          <th>修订号</th>
           <th>操作人</th>
           <th>动作</th>
           <th>对象</th>
@@ -104,6 +105,7 @@
       <ng-template pTemplate="body" let-log>
         <tr>
           <td class="mono">{{ log.at | date: "yyyy-MM-dd HH:mm:ss" }}</td>
+          <td class="mono">R{{ log.revision }}</td>
           <td>{{ log.actor }}</td>
           <td>
             <span class="table-primary">{{ log.action }}</span>
@@ -114,7 +116,7 @@
       </ng-template>
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="5">没有符合条件的审计事件。</td>
+          <td colspan="6">没有符合条件的审计事件。</td>
         </tr>
       </ng-template>
     </p-table>

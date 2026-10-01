@@ -87,17 +87,25 @@ export const typeDefs = parse(`
     clarifications: [Clarification!]!
   }
 
+  type VersionSnapshot {
+    frozenAt: String!
+    responses: [SupplierResponse!]!
+  }
+
   type ReviewVersion {
     id: ID!
     version: String!
     label: String!
     status: VersionStatus!
+    revision: Int!
     createdAt: String!
     createdBy: String!
     signedBy: [String!]!
     clauseCount: Int!
     responseCount: Int!
+    hashAlgorithm: String!
     contentHash: String!
+    snapshot: VersionSnapshot
   }
 
   type AuditLog {
@@ -107,6 +115,15 @@ export const typeDefs = parse(`
     action: String!
     entity: String!
     detail: String!
+    revision: Int!
+  }
+
+  type VersionHashVerification {
+    versionId: ID!
+    revision: Int!
+    contentHash: String!
+    recomputedHash: String!
+    matches: Boolean!
   }
 
   type DashboardStats {
@@ -130,6 +147,7 @@ export const typeDefs = parse(`
     auditLogs: [AuditLog!]!
     dashboard: DashboardStats!
     suppliers: [Supplier!]!
+    currentRevision: Int!
   }
 
   input AssessmentInput {
@@ -139,6 +157,7 @@ export const typeDefs = parse(`
     comment: String!
     reviewer: String!
     role: ReviewRole!
+    baseRevision: Int!
   }
 
   input ClarificationInput {
@@ -146,12 +165,14 @@ export const typeDefs = parse(`
     requestText: String!
     dueAt: String!
     actor: String!
+    baseRevision: Int!
   }
 
   input ClarificationResponseInput {
     clarificationId: ID!
     responseText: String!
     actor: String!
+    baseRevision: Int!
   }
 
   input FinalizeVersionInput {
@@ -163,6 +184,7 @@ export const typeDefs = parse(`
   type Query {
     workspace: WorkspaceData!
     dashboard: DashboardStats!
+    verifyVersionHash(versionId: ID!): VersionHashVerification!
   }
 
   type Mutation {

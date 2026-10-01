@@ -15,6 +15,7 @@ export const initialReviewState: ReviewState = {
   },
   role: "reviewer_a",
   selectedSupplierIds: ["SUP-A", "SUP-B", "SUP-C"],
+  currentRevision: 0,
   loading: false,
   saving: false,
 };
@@ -34,6 +35,7 @@ export const reviewReducer = createReducer(
       loading: false,
       saving: false,
       error: undefined,
+      conflict: undefined,
       toast,
     }),
   ),
@@ -70,11 +72,45 @@ export const reviewReducer = createReducer(
     toast: undefined,
     error: undefined,
   })),
+  on(ReviewActions.submissionConflict, (state, { conflict }) => ({
+    ...state,
+    saving: false,
+    conflict,
+    currentRevision: conflict.currentRevision,
+  })),
+  on(ReviewActions.dismissConflict, (state) => ({
+    ...state,
+    conflict: undefined,
+  })),
+  on(ReviewActions.verifyVersionHash, (state) => ({
+    ...state,
+    saving: true,
+    hashVerification: undefined,
+    error: undefined,
+  })),
+  on(
+    ReviewActions.verifyVersionHashSuccess,
+    (state, { verification }) => ({
+      ...state,
+      saving: false,
+      hashVerification: verification,
+    }),
+  ),
+  on(ReviewActions.verifyVersionHashFailure, (state, { error }) => ({
+    ...state,
+    saving: false,
+    error,
+  })),
+  on(ReviewActions.clearHashVerification, (state) => ({
+    ...state,
+    hashVerification: undefined,
+  })),
   on(
     ReviewActions.submitAssessment,
     ReviewActions.requestClarification,
     ReviewActions.respondClarification,
     ReviewActions.finalizeVersion,
+    ReviewActions.retryConflictedSubmission,
     ReviewActions.resetReviewData,
     (state) => ({
       ...state,

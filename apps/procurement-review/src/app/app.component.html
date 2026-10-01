@@ -48,4 +48,53 @@
   <router-outlet />
 </main>
 
+<p-dialog
+  header="提交与工作修订号冲突"
+  [modal]="true"
+  [visible]="!!conflict()"
+  (visibleChange)="onConflictVisibleChange($event)"
+  [style]="{ width: 'min(640px, 94vw)' }"
+  [closable]="false"
+>
+  @if (conflict(); as pending) {
+    <div class="conflict-dialog">
+      <p class="conflict-lead">
+        本次提交基于修订号 R{{ pending.baseRevision }}，但评审数据已推进到
+        R{{ pending.currentRevision }}。提交未被写入，尝试已保留在审计日志中；
+        确认下列变更后可基于最新修订号重发。
+      </p>
+      <ul class="conflict-list">
+        @for (item of pending.conflicts; track item.at + item.entity) {
+          <li>
+            <header>
+              <span class="mono">R{{ item.revision }}</span>
+              <strong>{{ item.actor }} · {{ item.action }}</strong>
+              <time>{{ item.at | date: "yyyy-MM-dd HH:mm:ss" }}</time>
+            </header>
+            <span class="conflict-entity mono">{{ item.entity }}</span>
+            <p>{{ item.detail }}</p>
+          </li>
+        } @empty {
+          <li class="conflict-empty">
+            未列出中间变更，工作区可能已被重置；重发将以最新数据为准。
+          </li>
+        }
+      </ul>
+      <div class="conflict-actions">
+        <p-button
+          label="放弃本次提交"
+          severity="secondary"
+          [outlined]="true"
+          (onClick)="dismissConflict()"
+        />
+        <p-button
+          label="按最新修订号重发"
+          icon="pi pi-replay"
+          (onClick)="retryConflict()"
+        />
+      </div>
+    </div>
+  }
+</p-dialog>
+
 <p-toast position="top-right" />

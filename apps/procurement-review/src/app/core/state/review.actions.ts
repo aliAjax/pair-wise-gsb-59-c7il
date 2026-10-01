@@ -7,6 +7,8 @@ import type {
   FinalizeVersionInput,
   ReviewRole,
   ReviewState,
+  SubmissionConflict,
+  VersionHashVerification,
 } from "../models/review.models";
 
 export const ReviewActions = createActionGroup({
@@ -16,7 +18,12 @@ export const ReviewActions = createActionGroup({
     "Load Review Data Success": props<{
       workspace: Pick<
         ReviewState,
-        "clauses" | "versions" | "auditLogs" | "dashboard" | "suppliers"
+        | "clauses"
+        | "versions"
+        | "auditLogs"
+        | "dashboard"
+        | "suppliers"
+        | "currentRevision"
       >;
       toast?: string;
     }>(),
@@ -29,6 +36,15 @@ export const ReviewActions = createActionGroup({
     "Request Clarification": props<{ input: ClarificationInput }>(),
     "Respond Clarification": props<{ input: ClarificationResponseInput }>(),
     "Finalize Version": props<{ input: FinalizeVersionInput }>(),
+    "Submission Conflict": props<{ conflict: SubmissionConflict }>(),
+    "Retry Conflicted Submission": emptyProps(),
+    "Dismiss Conflict": emptyProps(),
+    "Verify Version Hash": props<{ versionId: string }>(),
+    "Verify Version Hash Success": props<{
+      verification: VersionHashVerification;
+    }>(),
+    "Verify Version Hash Failure": props<{ error: string }>(),
+    "Clear Hash Verification": emptyProps(),
     "Reset Review Data": emptyProps(),
   },
 });

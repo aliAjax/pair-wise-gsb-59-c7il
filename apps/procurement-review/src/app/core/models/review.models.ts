@@ -72,17 +72,25 @@ export interface ClauseTreeNode extends Clause {
   children: ClauseTreeNode[];
 }
 
+export interface VersionSnapshot {
+  frozenAt: string;
+  responses: SupplierResponse[];
+}
+
 export interface ReviewVersion {
   id: string;
   version: string;
   label: string;
   status: VersionStatus;
+  revision: number;
   createdAt: string;
   createdBy: string;
   signedBy: string[];
   clauseCount: number;
   responseCount: number;
+  hashAlgorithm: string;
   contentHash: string;
+  snapshot?: VersionSnapshot;
 }
 
 export interface AuditLog {
@@ -92,6 +100,43 @@ export interface AuditLog {
   action: string;
   entity: string;
   detail: string;
+  revision: number;
+}
+
+export interface RevisionConflictItem {
+  revision: number;
+  at: string;
+  actor: string;
+  action: string;
+  entity: string;
+  detail: string;
+}
+
+export type SubmissionConflictKind =
+  | "assessment"
+  | "clarification-request"
+  | "clarification-response";
+
+export type ConflictSubmissionInput =
+  | AssessmentInput
+  | ClarificationInput
+  | ClarificationResponseInput;
+
+export interface SubmissionConflict {
+  kind: SubmissionConflictKind;
+  input: ConflictSubmissionInput;
+  baseRevision: number;
+  currentRevision: number;
+  conflicts: RevisionConflictItem[];
+  attemptedAt: string;
+}
+
+export interface VersionHashVerification {
+  versionId: string;
+  revision: number;
+  contentHash: string;
+  recomputedHash: string;
+  matches: boolean;
 }
 
 export interface DashboardStats {
@@ -125,6 +170,9 @@ export interface ReviewState {
   filters: ClauseFilters;
   role: ReviewRole;
   selectedSupplierIds: string[];
+  currentRevision: number;
+  conflict?: SubmissionConflict;
+  hashVerification?: VersionHashVerification;
   loading: boolean;
   saving: boolean;
   error?: string;
@@ -138,6 +186,7 @@ export interface WorkspaceQueryResult {
     auditLogs: AuditLog[];
     dashboard: DashboardStats;
     suppliers: Supplier[];
+    currentRevision: number;
   };
 }
 
@@ -148,6 +197,7 @@ export interface AssessmentInput {
   comment: string;
   reviewer: string;
   role: ReviewRole;
+  baseRevision: number;
 }
 
 export interface ClarificationInput {
@@ -155,12 +205,14 @@ export interface ClarificationInput {
   requestText: string;
   dueAt: string;
   actor: string;
+  baseRevision: number;
 }
 
 export interface ClarificationResponseInput {
   clarificationId: string;
   responseText: string;
   actor: string;
+  baseRevision: number;
 }
 
 export interface FinalizeVersionInput {

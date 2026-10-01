@@ -9,6 +9,7 @@ import type {
   FinalizeVersionInput,
   ReviewVersion,
   ReviewerOpinion,
+  VersionHashVerification,
   WorkspaceQueryResult,
 } from "../models/review.models";
 
@@ -68,11 +69,13 @@ const WORKSPACE_QUERY = gql`
         version
         label
         status
+        revision
         createdAt
         createdBy
         signedBy
         clauseCount
         responseCount
+        hashAlgorithm
         contentHash
       }
       auditLogs {
@@ -82,6 +85,7 @@ const WORKSPACE_QUERY = gql`
         action
         entity
         detail
+        revision
       }
       dashboard {
         totalClauses
@@ -96,6 +100,7 @@ const WORKSPACE_QUERY = gql`
         id
         name
       }
+      currentRevision
     }
   }
 `;
@@ -156,12 +161,26 @@ const FINALIZE_VERSION = gql`
       version
       label
       status
+      revision
       createdAt
       createdBy
       signedBy
       clauseCount
       responseCount
+      hashAlgorithm
       contentHash
+    }
+  }
+`;
+
+const VERIFY_VERSION_HASH = gql`
+  query VerifyVersionHash($versionId: ID!) {
+    verifyVersionHash(versionId: $versionId) {
+      versionId
+      revision
+      contentHash
+      recomputedHash
+      matches
     }
   }
 `;
@@ -258,6 +277,23 @@ export class ReviewGraphqlService {
             throw new Error("GraphQL 未返回版本信息。");
           }
           return result.data.finalizeVersion;
+        }),
+      );
+  }
+
+  verifyVersionHash(versionId: string): Observable<VersionHashVerification> {
+    return this.apollo
+      .query<{ verifyVersionHash: VersionHashVerification }>({
+        query: VERIFY_VERSION_HASH,
+        variables: { versionId },
+        fetchPolicy: "network-only",
+      })
+      .pipe(
+        map((result) => {
+          if (!result.data) {
+            throw new Error("GraphQL 未返回哈希校验结果。");
+          }
+          return result.data.verifyVersionHash;
         }),
       );
   }
